@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f555e413ba3cf75488358b89f8d7a870, type: 3}
+  m_Name: KeybindDataSO
+  m_EditorClassIdentifier: 
+  bindings:
+  - actionName: Horizontal
+    keyboardBinding: A/D
+    controllerBinding: LeftStickX
+  - actionName: Vertical
+    keyboardBinding: S/W
+    controllerBinding: LeftStickY
+  - actionName: LightAttack
+    keyboardBinding: MouseButton0
+    controllerBinding: JoystickButton2
+  - actionName: HeavyAttack
+    keyboardBinding: MouseButton1
+    controllerBinding: JoystickButton3
+  - actionName: Dodge
+    keyboardBinding: Space
+    controllerBinding: JoystickButton0
+  - actionName: AbilityModifier1
+    keyboardBinding: Q
+    controllerBinding: JoystickAxis10
+  - actionName: AbilityModifier2
+    keyboardBinding: E
+    controllerBinding: JoystickAxis9
+  - actionName: Pause
+    keyboardBinding: Escape
+    controllerBinding: JoystickButton7
+  - actionName: Recall
+    keyboardBinding: B
+    controllerBinding: JoystickButton5
+  - actionName: Stats
+    keyboardBinding: Tab
+    controllerBinding: JoystickButton6
