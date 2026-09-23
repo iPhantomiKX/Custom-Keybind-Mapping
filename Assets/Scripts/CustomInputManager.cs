@@ -12,6 +12,7 @@ public class CustomInputManager : MonoBehaviour
 
     // Internal lookup dictionary
     private Dictionary<string, KeybindData> keybinds = new Dictionary<string, KeybindData>();
+    public Dictionary<string, KeybindData> GetAllBindings() => keybinds;
     private string savePath;
 
     [Header("Axis Settings")]
@@ -41,14 +42,107 @@ public class CustomInputManager : MonoBehaviour
     private void Update()
     {
         // Smooth out the keyboard input simulation for axes
-        horizontalValue = CalculateKeyboardAxis("Horizontal", horizontalValue);
-        verticalValue = CalculateKeyboardAxis("Vertical", verticalValue);
+        //horizontalValue = CalculateKeyboardAxis("Horizontal", horizontalValue);
+        //verticalValue = CalculateKeyboardAxis("Vertical", verticalValue);
         
-        if(horizontalValue != 0 || verticalValue != 0)
-            Debug.LogError("H: " +  horizontalValue + ", V: " + verticalValue);
+        //if(horizontalValue != 0 || verticalValue != 0)
+        //    Debug.LogError("H: " +  horizontalValue + ", V: " + verticalValue);
 
-        if (GetButtonDown("LightAttack"))
-            Debug.LogError("LightAttack Button: is pressed");
+        //if (GetButtonDown("LightAttack"))
+        //    Debug.LogError("LightAttack Button: is pressed");
+    }
+
+    public IEnumerator WaitAndRebind(string actionName, bool isControllerSlot, System.Action<string> onComplete)
+    {
+        // Wait a frame to prevent immediately capturing the mouse click that hit the UI button
+        yield return null;
+
+        bool inputFound = false;
+        string detectedBinding = "";
+
+        while (!inputFound)
+        {
+            if (isControllerSlot)
+            {
+                // 1. Check Controller Analog Axes (Triggers / D-Pad axes mapped to slots 3-10)
+                for (int axisNum = 3; axisNum <= 10; axisNum++)
+                {
+                    string axisName = "JoystickAxis" + axisNum;
+                    // Check if an axis is pushed significantly past a deadzone
+                    if (Mathf.Abs(Input.GetAxisRaw(axisName)) > 0.6f)
+                    {
+                        detectedBinding = axisName;
+                        inputFound = true;
+                        break;
+                    }
+                }
+
+                // 2. Check Controller Buttons (JoystickButton0 to 19)
+                if (!inputFound)
+                {
+                    for (int i = 0; i < 20; i++)
+                    {
+                        KeyCode joyCode = (KeyCode)System.Enum.Parse(typeof(KeyCode), "JoystickButton" + i);
+                        if (Input.GetKeyDown(joyCode))
+                        {
+                            detectedBinding = joyCode.ToString();
+                            inputFound = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // 3. Check Keyboard Inputs
+                if (Input.anyKeyDown)
+                {
+                    foreach (KeyCode kcode in System.Enum.GetValues(typeof(KeyCode)))
+                    {
+                        // Exclude mouse values initially to prevent overlap issues
+                        if ((int)kcode >= (int)KeyCode.Mouse0 && (int)kcode <= (int)KeyCode.Mouse6) continue;
+
+                        if (Input.GetKeyDown(kcode))
+                        {
+                            detectedBinding = kcode.ToString();
+                            inputFound = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 4. Check Mouse Clicks
+                if (!inputFound)
+                {
+                    for (int m = 0; m <= 6; m++)
+                    {
+                        if (Input.GetMouseButtonDown(m))
+                        {
+                            detectedBinding = "Mouse" + m;
+                            inputFound = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            yield return null;
+        }
+
+        // Apply to the active settings profile dictionary
+        if (keybinds.ContainsKey(actionName))
+        {
+            if (isControllerSlot)
+                keybinds[actionName].controllerBinding = detectedBinding;
+            else
+                keybinds[actionName].keyboardBinding = detectedBinding;
+
+            // Instantly write updates down to the persistent JSON file
+            SaveKeybinds();
+        }
+
+        // Fire UI text refresh update
+        onComplete?.Invoke(detectedBinding);
     }
 
     private float CalculateKeyboardAxis(string actionName, float currentValue)
@@ -71,6 +165,32 @@ public class CustomInputManager : MonoBehaviour
     }
 
     // --- PUBLIC RUNTIME API ---
+
+    public bool GetButton(string actionName)
+    {
+        if (!keybinds.ContainsKey(actionName)) return false;
+        var bind = keybinds[actionName];
+
+        // 1. Check Keyboard/Mouse Profile (Continuous check)
+        if (System.Enum.TryParse(bind.keyboardBinding, out KeyCode kbKey))
+        {
+            if (Input.GetKey(kbKey)) return true;
+        }
+
+        // 2. Check Controller Profile (Handles continuous analog inputs or button holds)
+        if (bind.controllerBinding.StartsWith("JoystickAxis"))
+        {
+            // Triggers register as an analog spectrum (0.0 to 1.0)
+            float axisValue = Input.GetAxisRaw(bind.controllerBinding);
+            return axisValue > 0.5f; // Active if squeezed past 50% pressure
+        }
+        else if (System.Enum.TryParse(bind.controllerBinding, out KeyCode joyKey))
+        {
+            if (Input.GetKey(joyKey)) return true;
+        }
+
+        return false;
+    }
 
     public bool GetButtonDown(string actionName)
     {
@@ -98,6 +218,70 @@ public class CustomInputManager : MonoBehaviour
         if (axisName == "Vertical") return verticalValue;
 
         return 0f;
+    }
+
+    /// <summary>
+    /// Checks if a structural modifier binding is currently being held down.
+    /// </summary>
+    public bool IsModifierHeld(string modifierActionName, bool checkingController)
+    {
+        if (!keybinds.ContainsKey(modifierActionName)) return false;
+
+        var bind = keybinds[modifierActionName];
+
+        if (checkingController)
+        {
+            // If the controller modifier is bound to a continuous Axis (like JoystickAxis10)
+            if (bind.controllerBinding.StartsWith("JoystickAxis"))
+            {
+                float axisValue = Input.GetAxisRaw(bind.controllerBinding);
+                return axisValue > 0.5f; // Held down if pulled past 50% pressure
+            }
+            // Fallback for standard buttons used as modifiers (e.g., LB/L1 via JoystickButton4)
+            if (System.Enum.TryParse(bind.controllerBinding, out KeyCode joyKey))
+            {
+                return Input.GetKey(joyKey);
+            }
+        }
+        else
+        {
+            // Check Keyboard/Mouse Profile Modifier
+            if (System.Enum.TryParse(bind.keyboardBinding, out KeyCode kbKey))
+            {
+                return Input.GetKey(kbKey);
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Enhanced Button check that pairs a core action with a separate dedicated modifier mapping.
+    /// </summary>
+    public bool GetButtonDownWithModifier(string actionName, string modifierActionName)
+    {
+        if (!keybinds.ContainsKey(actionName)) return false;
+        var bind = keybinds[actionName];
+
+        // 1. CHECK KEYBOARD/MOUSE PROFILE
+        if (System.Enum.TryParse(bind.keyboardBinding, out KeyCode kbKey))
+        {
+            if (Input.GetKeyDown(kbKey) && IsModifierHeld(modifierActionName, false))
+            {
+                return true;
+            }
+        }
+
+        // 2. CHECK CONTROLLER PROFILE
+        if (System.Enum.TryParse(bind.controllerBinding, out KeyCode joyKey))
+        {
+            if (Input.GetKeyDown(joyKey) && IsModifierHeld(modifierActionName, true))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // --- JSON SYSTEM ---
