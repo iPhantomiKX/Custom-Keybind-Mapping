@@ -2,12 +2,13 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class KeybindRowUI : MonoBehaviour
 {
     public TextMeshProUGUI actionNameText;
-    
+
     [Header("Keyboard/Mouse UI")]
     public Button keyboardButton;
     public TextMeshProUGUI keyboardText;
@@ -22,10 +23,12 @@ public class KeybindRowUI : MonoBehaviour
     {
         actionName = action;
         actionNameText.text = action;
-        keyboardText.text = currentKb;
-        controllerText.text = currentJoy;
 
-        // Setup Button Listeners
+        // Pass the raw data through the utility formatter for visual display
+        keyboardText.text = InputDisplayFormatter.GetPrettyName(currentKb);
+        controllerText.text = InputDisplayFormatter.GetPrettyName(currentJoy);
+
+        // Bind layout actions
         keyboardButton.onClick.RemoveAllListeners();
         keyboardButton.onClick.AddListener(() => StartRebinding(isControllerSlot: false));
 
@@ -42,23 +45,39 @@ public class KeybindRowUI : MonoBehaviour
         }
         else
         {
-            keyboardText.text = "Press Key...";
+            // If it's an axis like Horizontal/Vertical, hint the steps contextually
+            if (actionName == "Horizontal" || actionName == "Vertical")
+                keyboardText.text = "Press Neg Key...";
+            else
+                keyboardText.text = "Press Key...";
+
             keyboardButton.interactable = false;
         }
 
-        // Call the Input Manager to listen for input
-        StartCoroutine(CustomInputManager.Instance.WaitAndRebind(actionName, isControllerSlot, (newBindingValue) => 
+        // Trigger dynamic listener cycle
+        StartCoroutine(CustomInputManager.Instance.WaitAndRebind(actionName, isControllerSlot, (newRawValue) =>
         {
-            // Callback executing once key is found
+            // Re-enable and format cleanly once structural capture resolves safely
             if (isControllerSlot)
             {
-                controllerText.text = newBindingValue;
+                controllerText.text = InputDisplayFormatter.GetPrettyName(newRawValue);
                 controllerButton.interactable = true;
+                EventSystem.current.SetSelectedGameObject(controllerButton.gameObject);
+                CustomInputManager.Instance.UpdateLastSelectedUI(controllerButton.gameObject);
             }
             else
             {
-                keyboardText.text = newBindingValue;
-                keyboardButton.interactable = true;
+                // Note: The multi-step rebind callback passes "Press POSITIVE Key..." mid-process, 
+                // which our formatter safely returns as text because it doesn't match a code block entry.
+                keyboardText.text = InputDisplayFormatter.GetPrettyName(newRawValue);
+
+                // Only re-enable the button once a valid key string has finished mapping 
+                // (Checking if it still states standard instructions text)
+                if (!newRawValue.Contains("Key..."))
+                {
+                    keyboardButton.interactable = true;
+                    CustomInputManager.Instance.UpdateLastSelectedUI(keyboardButton.gameObject);
+                }
             }
         }));
     }

@@ -6,16 +6,18 @@ public class KeybindMenuUI : MonoBehaviour
 {
     public Transform container;     // Grid or Vertical Layout container
     public GameObject rowPrefab;    // UI row element prefab containing the KeybindRowUI script
+    private Dictionary<string, KeybindData> activeBinds = new Dictionary<string, KeybindData>();
 
-    private void Start()
+    private void Update()
     {
-        GenerateMenuVisuals();
+        if(activeBinds.Count == 0)
+            GenerateMenuVisuals();
     }
 
-    private void OnEnable()
-    {
-        GenerateMenuVisuals();
-    }
+    //private void OnEnable()
+    //{
+    //    GenerateMenuVisuals();
+    //}
 
     public void GenerateMenuVisuals()
     {
@@ -26,7 +28,7 @@ public class KeybindMenuUI : MonoBehaviour
         }
 
         // Construct new display rows
-        var activeBinds = CustomInputManager.Instance.GetAllBindings();
+        activeBinds = CustomInputManager.Instance.GetAllBindings();
         foreach (var kvp in activeBinds)
         {
             GameObject instantiatedRow = Instantiate(rowPrefab, container);
